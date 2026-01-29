@@ -2,7 +2,7 @@ from typing import List, Tuple
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-# from ollama import Client
+from ollama import Client
 from google import genai
 import os
 from dotenv import load_dotenv
@@ -12,6 +12,9 @@ from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from datetime import datetime
 import msal
 import markdown
+
+LLM_MODEL = 'Ollama'
+
 
 
 def scrape_titles(url: str) -> List[Tuple[str, str, str]]:
@@ -221,6 +224,58 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> str:
     raise Exception("Max retries exceeded")
 
 
+def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3:8b') -> str:
+    """
+    Call Ollama API with exponential backoff retry on errors.
+    
+    Args:
+        client: The Ollama client
+        prompt: The prompt to send
+        max_retries: Maximum number of retries (default 3)
+        model: The Ollama model to use (default 'qwen3:8b')
+        
+    Returns:
+        The response text from Ollama
+        
+    Raises:
+        Exception: If all retries fail
+    """
+
+    client = Client(
+        host='http://192.168.11.81:11434',
+        headers={'x-some-header': 'some-value'}
+    )
+    retry_delays = [1, 2, 4]  # Exponential backoff: 1s, 2s, 4s
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.chat(model=model, messages=[
+                {
+                    'role': 'user',
+                    'content': prompt,
+                },
+            ])
+            return response.message.content
+            
+        except Exception as e:
+            error_str = str(e)
+            # Check if it's a retryable error (connection issues, timeouts, etc.)
+            if any(err in error_str.lower() for err in ['timeout', 'connection', 'overloaded', '503', '429']):
+                if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                    delay = retry_delays[attempt]
+                    print(f"    Error occurred. Retrying in {delay}s... (attempt {attempt + 1}/{max_retries})")
+                    time.sleep(delay)
+                else:
+                    print(f"    Failed after {max_retries} attempts.")
+                    raise
+            else:
+                # For non-retryable errors, raise immediately
+                raise
+    
+    # This shouldn't be reached, but just in case
+    raise Exception("Max retries exceeded")
+
+
 def render_newsletter_email(summaries: List[dict], keywords: List[str], total_articles: int) -> str:
     """
     Render the newsletter HTML email using Jinja2 template.
@@ -383,7 +438,7 @@ if __name__ == "__main__":
         print("No titles found or an error occurred.")
 
 
-    keywords = [ "Gaming"]
+    keywords = [ "Embedded AI"]
     
     # Read the newsletter prompt context
     with open('newsletter_prompt_context.md', 'r', encoding='utf-8') as f:
@@ -410,7 +465,7 @@ KEYWORDS: {keywords_text}
     
     # Make the Gemini API call
     print("\n" + "="*80)
-    print("Calling Gemini API to analyze articles...")
+    print(f"Calling {LLM_MODEL} API to analyze articles...")
     print("="*80 + "\n")
     
     # # Ollama version (commented out)
@@ -425,7 +480,12 @@ KEYWORDS: {keywords_text}
     #     },
     # ])
     
-    response_text = call_gemini_with_retry(client, full_prompt)
+    if LLM_MODEL == 'Ollama':
+        response_text = call_ollama_with_retry(client, full_prompt, model='qwen3:8b')
+    elif LLM_MODEL == 'Gemini':
+        response_text = call_gemini_with_retry(client, full_prompt)
+    else:
+        raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
     
     print("AI Response:")
     print("-" * 80)
@@ -497,17 +557,14 @@ Please provide:
             print(f"    Generating AI summary...")
             
             try:
-                # # Ollama version (commented out)
-                # summary_response = client.chat(model='qwen3:8b', messages=[
-                #     {
-                #         'role': 'user',
-                #         'content': summary_prompt,
-                #     },
-                # ])
-                # summary = summary_response.message.content
-                
-                summary = call_gemini_with_retry(client, summary_prompt)
-                
+                if LLM_MODEL == 'Ollama':
+                    summary = call_ollama_with_retry(client, summary_prompt, model='qwen3:8b')
+                elif LLM_MODEL == 'Gemini':
+                    summary = call_gemini_with_retry(client, summary_prompt)
+                else:
+                    raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
+
+
                 summaries.append({
                     'index': idx,
                     'title': title,

@@ -8,6 +8,6 @@ plan:
 -[x] build scraper for news sites
 -[x] generate context prompt
 -[x] integrate ollama with scraper
--[ ] build email template
--[ ] set up email sending service
--[ ] bring everything together
+-[x] build email template
+-[x] set up email sending service
+-[x] bring everything together
