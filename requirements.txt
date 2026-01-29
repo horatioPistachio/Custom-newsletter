@@ -1,0 +1,8 @@
+ollama
+requests
+beautifulsoup4
+google-genai
+python-dotenv
+jinja2
+msal
+markdown

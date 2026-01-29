@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ newsletter_title }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #ff6600;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #ff6600;
+            margin: 0;
+            font-size: 32px;
+        }
+        .header p {
+            color: #666;
+            margin: 10px 0 0 0;
+            font-size: 14px;
+        }
+        .keywords {
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .keywords strong {
+            color: #ff6600;
+        }
+        .keywords .keyword-tag {
+            display: inline-block;
+            background-color: #ff6600;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            margin: 5px;
+            font-size: 13px;
+        }
+        .article {
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .article:last-child {
+            border-bottom: none;
+        }
+        .article-header {
+            margin-bottom: 15px;
+        }
+        .article-index {
+            display: inline-block;
+            background-color: #ff6600;
+            color: white;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        .article-title {
+            color: #333;
+            font-size: 22px;
+            font-weight: bold;
+            margin: 10px 0;
+            line-height: 1.4;
+        }
+        .article-links {
+            margin: 15px 0;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        .article-link {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 16px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .article-link.primary {
+            background-color: #ff6600;
+            color: white;
+        }
+        .article-link.secondary {
+            background-color: #f0f0f0;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+        .article-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        .article-summary {
+            background-color: #fafafa;
+            padding: 20px;
+            border-radius: 5px;
+            border-left: 4px solid #ff6600;
+            color: #444;
+            line-height: 1.8;
+        }
+        .article-summary h1, .article-summary h2, .article-summary h3 {
+            color: #333;
+            margin-top: 15px;
+            margin-bottom: 10px;
+        }
+        .article-summary h1 { font-size: 20px; }
+        .article-summary h2 { font-size: 18px; }
+        .article-summary h3 { font-size: 16px; }
+        .article-summary ul, .article-summary ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        .article-summary li {
+            margin: 5px 0;
+        }
+        .article-summary p {
+            margin: 10px 0;
+        }
+        .article-summary strong {
+            color: #ff6600;
+            font-weight: 600;
+        }
+        .article-summary code {
+            background-color: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .article-summary pre {
+            background-color: #f0f0f0;
+            padding: 12px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        .article-summary blockquote {
+            border-left: 3px solid #ff6600;
+            padding-left: 15px;
+            margin: 15px 0;
+            color: #666;
+            font-style: italic;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+            color: #666;
+            font-size: 13px;
+        }
+        .footer a {
+            color: #ff6600;
+            text-decoration: none;
+        }
+        .stats {
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+        @media only screen and (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 20px;
+            }
+            .header h1 {
+                font-size: 24px;
+            }
+            .article-title {
+                font-size: 18px;
+            }
+            .article-links {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{ newsletter_title }}</h1>
+            <p>{{ date }}</p>
+        </div>
+
+        {% if keywords %}
+        <div class="keywords">
+            <strong>Curated for your interests:</strong><br>
+            {% for keyword in keywords %}
+            <span class="keyword-tag">{{ keyword }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="stats">
+            📊 Analyzed {{ total_articles }} articles • Selected {{ selected_count }} relevant stories
+        </div>
+
+        {% for article in articles %}
+        <div class="article">
+            <div class="article-header">
+                <span class="article-index">#{{ article.index }}</span>
+                <h2 class="article-title">{{ article.title }}</h2>
+            </div>
+
+            <div class="article-links">
+                <a href="{{ article.article_url }}" class="article-link primary">📖 Read Article</a>
+                <a href="{{ article.comments_url }}" class="article-link secondary">💬 View Discussion</a>
+            </div>
+
+            <div class="article-summary">{{ article.summary | safe }}</div>
+        </div>
+        {% endfor %}
+
+        <div class="footer">
+            <p>
+                This newsletter was automatically curated from <a href="https://news.ycombinator.com/">Hacker News</a><br>
+                Generated on {{ date }} • Powered by AI
+            </p>
+        </div>
+    </div>
+</body>
+</html>
