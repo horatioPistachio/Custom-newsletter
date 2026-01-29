@@ -180,7 +180,7 @@ def parse_ai_response(response_text: str) -> List[int]:
     return [int(num) for num in numbers]
 
 
-def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> str:
+def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> tuple[str, dict]:
     """
     Call Gemini API with exponential backoff retry on 503 errors.
     
@@ -190,7 +190,11 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> str:
         max_retries: Maximum number of retries (default 3)
         
     Returns:
-        The response text from Gemini
+        Tuple of (response_text, telemetry_dict) where telemetry contains:
+        - duration: Time taken in seconds
+        - input_tokens: Number of input tokens
+        - output_tokens: Number of output tokens
+        - model: Model used
         
     Raises:
         Exception: If all retries fail
@@ -199,11 +203,26 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> str:
     
     for attempt in range(max_retries):
         try:
+            start_time = time.time()
             response = client.models.generate_content(
                 model="gemini-3-flash-preview",
                 contents=prompt,
             )
-            return response.text
+            duration = time.time() - start_time
+            
+            # Extract token usage if available
+            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            
+            telemetry = {
+                'duration': duration,
+                'input_tokens': input_tokens,
+                'output_tokens': output_tokens,
+                'total_tokens': input_tokens + output_tokens,
+                'model': 'gemini-3-flash-preview'
+            }
+            
+            return response.text, telemetry
             
         except Exception as e:
             error_str = str(e)
@@ -224,7 +243,7 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> str:
     raise Exception("Max retries exceeded")
 
 
-def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3:8b') -> str:
+def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3:8b') -> tuple[str, dict]:
     """
     Call Ollama API with exponential backoff retry on errors.
     
@@ -235,7 +254,11 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
         model: The Ollama model to use (default 'qwen3:8b')
         
     Returns:
-        The response text from Ollama
+        Tuple of (response_text, telemetry_dict) where telemetry contains:
+        - duration: Time taken in seconds
+        - input_tokens: Number of input tokens (if available)
+        - output_tokens: Number of output tokens (if available)
+        - model: Model used
         
     Raises:
         Exception: If all retries fail
@@ -249,13 +272,28 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
     
     for attempt in range(max_retries):
         try:
+            start_time = time.time()
             response = client.chat(model=model, messages=[
                 {
                     'role': 'user',
                     'content': prompt,
                 },
             ])
-            return response.message.content
+            duration = time.time() - start_time
+            
+            # Extract token usage if available
+            input_tokens = getattr(response, 'prompt_eval_count', 0)
+            output_tokens = getattr(response, 'eval_count', 0)
+            
+            telemetry = {
+                'duration': duration,
+                'input_tokens': input_tokens,
+                'output_tokens': output_tokens,
+                'total_tokens': input_tokens + output_tokens,
+                'model': model
+            }
+            
+            return response.message.content, telemetry
             
         except Exception as e:
             error_str = str(e)
@@ -438,7 +476,7 @@ if __name__ == "__main__":
         print("No titles found or an error occurred.")
 
 
-    keywords = [ "Embedded AI"]
+    keywords = [ "Mechanical engineering"]
     
     # Read the newsletter prompt context
     with open('newsletter_prompt_context.md', 'r', encoding='utf-8') as f:
@@ -481,15 +519,19 @@ KEYWORDS: {keywords_text}
     # ])
     
     if LLM_MODEL == 'Ollama':
-        response_text = call_ollama_with_retry(client, full_prompt, model='qwen3:8b')
+        response_text, telemetry = call_ollama_with_retry(client, full_prompt, model='qwen3:8b')
     elif LLM_MODEL == 'Gemini':
-        response_text = call_gemini_with_retry(client, full_prompt)
+        response_text, telemetry = call_gemini_with_retry(client, full_prompt)
     else:
         raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
     
     print("AI Response:")
     print("-" * 80)
     print(response_text)
+    print("-" * 80)
+    print(f"\n📊 Telemetry: {telemetry['model']} | Duration: {telemetry['duration']:.2f}s | "
+          f"Input: {telemetry['input_tokens']} tokens | Output: {telemetry['output_tokens']} tokens | "
+          f"Total: {telemetry['total_tokens']} tokens\n")
     print("-" * 80)
     
     # Parse the AI response to get selected article indexes
@@ -558,12 +600,16 @@ Please provide:
             
             try:
                 if LLM_MODEL == 'Ollama':
-                    summary = call_ollama_with_retry(client, summary_prompt, model='qwen3:8b')
+                    summary, summary_telemetry = call_ollama_with_retry(client, summary_prompt, model='qwen3:8b')
                 elif LLM_MODEL == 'Gemini':
-                    summary = call_gemini_with_retry(client, summary_prompt)
+                    summary, summary_telemetry = call_gemini_with_retry(client, summary_prompt)
                 else:
                     raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
 
+                print(f"    ✓ Summary generated successfully")
+                print(f"    📊 {summary_telemetry['duration']:.2f}s | "
+                      f"In: {summary_telemetry['input_tokens']} | Out: {summary_telemetry['output_tokens']} | "
+                      f"Total: {summary_telemetry['total_tokens']} tokens")
 
                 summaries.append({
                     'index': idx,
@@ -572,8 +618,6 @@ Please provide:
                     'comments_url': comments_url,
                     'summary': summary
                 })
-                
-                print(f"    ✓ Summary generated successfully")
                 
                 # Small delay to avoid overwhelming the API
                 time.sleep(0.5)
