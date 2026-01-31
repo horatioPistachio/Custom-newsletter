@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  newsletter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: custom-newsletter
+    env_file:
+      - .env
+    environment:
+      # Override these in .env file or set directly here
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CLIENT_ID=${CLIENT_ID}
+      - TENANT_ID=${TENANT_ID}
+      - CLIENT_SECRET=${CLIENT_SECRET}
+      - SENDER_EMAIL=${SENDER_EMAIL}
+      - RECIPIENT_EMAIL=${RECIPIENT_EMAIL}
+      # Ollama host - points to the ollama service
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
+      # Cron schedule (defaults to 6:00 AM daily)
+      - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}
+    volumes:
+      # Mount for development (optional - remove in production)
+      - .:/app
+    # depends_on:
+    #   - ollama
+    networks:
+      - newsletter-network
+    restart: unless-stopped
+
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     # Persist Ollama models
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - newsletter-network
+  #   restart: unless-stopped
+    # Uncomment below for GPU support (NVIDIA)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+networks:
+  newsletter-network:
+    driver: bridge
+
+volumes:
+  ollama-data:
