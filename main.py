@@ -13,7 +13,11 @@ from datetime import datetime
 import msal
 import markdown
 
-LLM_MODEL = 'Ollama'
+# Load environment variables
+load_dotenv()
+
+# LLM Model selection - can be 'Gemini' or 'Ollama'
+LLM_MODEL = os.getenv('LLM_MODEL', 'Gemini')
 
 
 
@@ -454,8 +458,7 @@ def send_newsletter_email(html_content: str, recipients: List[str], subject: str
 
 
 if __name__ == "__main__":
-    # Load environment variables and initialize Gemini client
-    load_dotenv()
+    # Initialize Gemini client
     api_key = os.getenv("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
     
@@ -505,18 +508,7 @@ KEYWORDS: {keywords_text}
     print("\n" + "="*80)
     print(f"Calling {LLM_MODEL} API to analyze articles...")
     print("="*80 + "\n")
-    
-    # # Ollama version (commented out)
-    # client = Client(
-    #     host='http://192.168.11.81:11434',
-    #     headers={'x-some-header': 'some-value'}
-    # )
-    # response = client.chat(model='qwen3:8b', messages=[
-    #     {
-    #         'role': 'user',
-    #         'content': full_prompt,
-    #     },
-    # ])
+
     
     if LLM_MODEL == 'Ollama':
         response_text, telemetry = call_ollama_with_retry(client, full_prompt, model='qwen3:8b')
@@ -571,8 +563,8 @@ KEYWORDS: {keywords_text}
                 continue
             
             # Truncate if too long to avoid token limits
-            max_article_length = 5000
-            max_comments_length = 3000
+            max_article_length = 10000
+            max_comments_length = 10000
             
             if len(article_text) > max_article_length:
                 article_text = article_text[:max_article_length] + "\n...[truncated]"
@@ -580,21 +572,16 @@ KEYWORDS: {keywords_text}
             if len(comments_text) > max_comments_length:
                 comments_text = comments_text[:max_comments_length] + "\n...[truncated]"
             
-            # Create summarization prompt
-            summary_prompt = f"""Please provide a concise summary of this article and highlight key discussion points from the comments.
-
-ARTICLE TITLE: {title}
-
-ARTICLE CONTENT:
-{article_text}
-
-HACKER NEWS COMMENTS:
-{comments_text}
-
-Please provide:
-1. A brief summary (2-3 sentences) of the article's main points
-2. Key insights or interesting perspectives from the comments
-3. Why this might be relevant to someone interested in {keywords_text}"""
+            # Read the summary prompt context and build the prompt
+            with open('summary_prompt_context.md', 'r', encoding='utf-8') as f:
+                summary_prompt_template = f.read()
+            
+            summary_prompt = summary_prompt_template.format(
+                title=title,
+                article_text=article_text,
+                comments_text=comments_text,
+                keywords=keywords_text
+            )
             
             print(f"    Generating AI summary...")
             
