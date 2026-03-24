@@ -247,7 +247,7 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> tuple[s
     raise Exception("Max retries exceeded")
 
 
-def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3:8b') -> tuple[str, dict]:
+def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3.5:4b') -> tuple[str, dict]:
     """
     Call Ollama API with exponential backoff retry on errors.
     
@@ -513,7 +513,7 @@ KEYWORDS: {keywords_text}
 
     
     if LLM_MODEL == 'Ollama':
-        response_text, telemetry = call_ollama_with_retry(client, full_prompt, model='qwen3:8b')
+        response_text, telemetry = call_ollama_with_retry(client, full_prompt, model='qwen3.5:4b')
     elif LLM_MODEL == 'Gemini':
         response_text, telemetry = call_gemini_with_retry(client, full_prompt)
     else:
