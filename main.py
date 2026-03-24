@@ -255,7 +255,7 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
         client: The Ollama client
         prompt: The prompt to send
         max_retries: Maximum number of retries (default 3)
-        model: The Ollama model to use (default 'qwen3:8b')
+        model: The Ollama model to use (default 'qwen3.5:4b')
         
     Returns:
         Tuple of (response_text, telemetry_dict) where telemetry contains:
@@ -589,7 +589,7 @@ KEYWORDS: {keywords_text}
             
             try:
                 if LLM_MODEL == 'Ollama':
-                    summary, summary_telemetry = call_ollama_with_retry(client, summary_prompt, model='qwen3:8b')
+                    summary, summary_telemetry = call_ollama_with_retry(client, summary_prompt, model='qwen3.5:4b')
                 elif LLM_MODEL == 'Gemini':
                     summary, summary_telemetry = call_gemini_with_retry(client, summary_prompt)
                 else:
