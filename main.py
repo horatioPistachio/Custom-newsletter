@@ -268,8 +268,10 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
         Exception: If all retries fail
     """
 
+    ollama_host = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+
     client = Client(
-        host='http://192.168.11.81:11434',
+        host=ollama_host,
         headers={'x-some-header': 'some-value'}
     )
     retry_delays = [1, 2, 4]  # Exponential backoff: 1s, 2s, 4s
@@ -665,4 +667,4 @@ KEYWORDS: {keywords_text}
                 print("Failed to send newsletter email")
                 print("="*80)
         else:
-            print("✗ Failed to render email template. Email not sent.")    
+            print("✗ Failed to render email template. Email not sent.")

@@ -9,22 +9,16 @@ services:
     env_file:
       - .env
     environment:
-      # Override these in .env file or set directly here
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - CLIENT_ID=${CLIENT_ID}
       - TENANT_ID=${TENANT_ID}
       - CLIENT_SECRET=${CLIENT_SECRET}
       - SENDER_EMAIL=${SENDER_EMAIL}
       - RECIPIENT_EMAIL=${RECIPIENT_EMAIL}
-      # Ollama host - points to the ollama service
       - OLLAMA_HOST=${OLLAMA_HOST:-http://ollama:11434}
-      # Cron schedule (defaults to 6:00 AM daily)
       - CRON_SCHEDULE=${CRON_SCHEDULE:-0 6 * * *}
     volumes:
-      # Mount for development (optional - remove in production)
       - .:/app
-    # depends_on:
-    #   - ollama
     networks:
       - newsletter-network
     restart: unless-stopped
@@ -39,12 +33,13 @@ services:
     image: ollama/ollama:latest
     ports:
       - "11434:11434"
-    # Healthcheck ensures the puller waits until the engine is actually up
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - newsletter-network
     deploy:
       resources:
         reservations:
@@ -58,12 +53,13 @@ services:
     container_name: ollama-pull-model
     volumes:
       - ./ollama:/root/.ollama
-    # This command sends a POST request to Ollama to pull the model
     command: >
       http://ollama:11434/api/pull -d '{"name": "qwen3:8b"}'
     depends_on:
       ollama:
         condition: service_healthy
+    networks:
+      - newsletter-network
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
@@ -72,12 +68,14 @@ services:
     ports:
       - "3000:8080"
     environment:
-      - 'OLLAMA_BASE_URL=http://ollama:11434'
-      - 'WEBUI_SECRET_KEY=super-secret-key-123' # Added for stability
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_SECRET_KEY=super-secret-key-123
     volumes:
       - ./open-webui:/app/backend/data
     depends_on:
       - ollama
+    networks:
+      - newsletter-network
 
 networks:
   newsletter-network:
