@@ -272,6 +272,7 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
 
     client = Client(
         host=ollama_host,
+        timeout=1800,
         headers={'x-some-header': 'some-value'}
     )
     retry_delays = [1, 2, 4]  # Exponential backoff: 1s, 2s, 4s
