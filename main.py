@@ -285,7 +285,8 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
                     'role': 'user',
                     'content': prompt,
                 },
-            ])
+            ],
+            think=False)
             duration = time.time() - start_time
             
             # Extract token usage if available
