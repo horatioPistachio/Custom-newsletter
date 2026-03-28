@@ -15,7 +15,7 @@ You are a classifier and summarizer. Read the article carefully, then complete e
 ---
 
 ## Step 1 — Relevance check
-Score how relevant this article is to the keywords above.
+Score how relevant this article is to the any of keywords above. Relevant articles may only be about one or some of the keywords.
 
 SCORE: [HIGH / MEDIUM / LOW]
 REASON: One sentence explaining the score. If LOW, state what the article is actually about.

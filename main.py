@@ -10,6 +10,7 @@ import re
 import time
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from datetime import datetime
+from pathlib import Path
 import msal
 import markdown
 
@@ -18,6 +19,9 @@ load_dotenv()
 
 # LLM Model selection - can be 'Gemini' or 'Ollama'
 LLM_MODEL = os.getenv('LLM_MODEL', 'Gemini')
+LLM_DEBUG_LOGS = os.getenv('LLM_DEBUG_LOGS', 'false').lower() in {'1', 'true', 'yes', 'on'}
+LLM_DEBUG_LOG_DIR = Path(os.getenv('LLM_DEBUG_LOG_DIR', 'llm_debug_logs'))
+LLM_DEBUG_SEQUENCE = 0
 
 
 
@@ -149,15 +153,18 @@ def scrape_article_and_comments(article_url: str, comments_url: str) -> Tuple[st
         response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # Find all comment containers
+        # Hacker News comment markup can vary slightly, but the text itself lives
+        # in commtext blocks. HN currently uses div.commtext, but keep a span
+        # fallback in case the markup changes again.
         comments = []
-        comment_elements = soup.find_all('div', class_='comment')
+        comment_spans = soup.select('tr.comtr div.commtext, tr.comtr span.commtext')
+
+        if not comment_spans:
+            comment_spans = soup.select('div.commtext, span.commtext')
         
-        for comment in comment_elements:
-            # Extract comment text
-            comment_span = comment.find('span', class_='commtext')
-            if comment_span:
-                comment_text = comment_span.get_text(separator=' ', strip=True)
+        for comment_span in comment_spans:
+            comment_text = ' '.join(comment_span.stripped_strings)
+            if comment_text:
                 comments.append(comment_text)
         
         comments_text = '\n\n---\n\n'.join(comments)
@@ -184,7 +191,61 @@ def parse_ai_response(response_text: str) -> List[int]:
     return [int(num) for num in numbers]
 
 
-def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> tuple[str, dict]:
+def write_llm_debug_log(label: str, prompt: str, response_text: str, telemetry: dict) -> None:
+    """
+    Persist a markdown log of a completed LLM call when debug logging is enabled.
+
+    Args:
+        label: Logical label for the LLM call
+        prompt: Exact prompt sent to the model
+        response_text: Exact response returned by the model
+        telemetry: Timing and token information for the call
+    """
+    if not LLM_DEBUG_LOGS:
+        return
+
+    global LLM_DEBUG_SEQUENCE
+    LLM_DEBUG_SEQUENCE += 1
+
+    LLM_DEBUG_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    filename_timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    safe_label = re.sub(r'[^a-zA-Z0-9_-]+', '-', label).strip('-').lower() or 'llm-call'
+    log_path = LLM_DEBUG_LOG_DIR / f"{filename_timestamp}_{LLM_DEBUG_SEQUENCE:02d}_{safe_label}.md"
+
+    log_content = f"""# LLM Debug Log
+
+- Timestamp: {timestamp}
+- Label: {label}
+- Model: {telemetry.get('model', 'unknown')}
+- Duration Seconds: {telemetry.get('duration', 0.0):.2f}
+- Input Tokens: {telemetry.get('input_tokens', 0)}
+- Output Tokens: {telemetry.get('output_tokens', 0)}
+- Total Tokens: {telemetry.get('total_tokens', 0)}
+- Prompt Characters: {len(prompt)}
+- Response Characters: {len(response_text)}
+
+## Prompt
+
+~~~~text
+{prompt}
+~~~~
+
+## Response
+
+~~~~text
+{response_text}
+~~~~
+"""
+
+    with log_path.open('w', encoding='utf-8') as log_file:
+        log_file.write(log_content)
+
+    print(f"    Debug log saved: {log_path}")
+
+
+def call_gemini_with_retry(client, prompt: str, max_retries: int = 3, label: str = 'gemini-call') -> tuple[str, dict]:
     """
     Call Gemini API with exponential backoff retry on 503 errors.
     
@@ -192,6 +253,7 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> tuple[s
         client: The Gemini client
         prompt: The prompt to send
         max_retries: Maximum number of retries (default 3)
+        label: Logical label for debug logging
         
     Returns:
         Tuple of (response_text, telemetry_dict) where telemetry contains:
@@ -225,6 +287,8 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> tuple[s
                 'total_tokens': input_tokens + output_tokens,
                 'model': 'gemini-3-flash-preview'
             }
+
+            write_llm_debug_log(label, prompt, response.text, telemetry)
             
             return response.text, telemetry
             
@@ -247,7 +311,7 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3) -> tuple[s
     raise Exception("Max retries exceeded")
 
 
-def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3.5:4b') -> tuple[str, dict]:
+def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3.5:4b', label: str = 'ollama-call') -> tuple[str, dict]:
     """
     Call Ollama API with exponential backoff retry on errors.
     
@@ -256,6 +320,7 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
         prompt: The prompt to send
         max_retries: Maximum number of retries (default 3)
         model: The Ollama model to use (default 'qwen3.5:4b')
+        label: Logical label for debug logging
         
     Returns:
         Tuple of (response_text, telemetry_dict) where telemetry contains:
@@ -300,6 +365,8 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
                 'total_tokens': input_tokens + output_tokens,
                 'model': model
             }
+
+            write_llm_debug_log(label, prompt, response.message.content, telemetry)
             
             return response.message.content, telemetry
             
@@ -550,9 +617,14 @@ KEYWORDS: {keywords_text}
     usage_totals = create_usage_totals()
 
     if LLM_MODEL == 'Ollama':
-        response_text, telemetry = call_ollama_with_retry(client, full_prompt, model='qwen3.5:4b')
+        response_text, telemetry = call_ollama_with_retry(
+            client,
+            full_prompt,
+            model='qwen3.5:4b',
+            label='article-selection'
+        )
     elif LLM_MODEL == 'Gemini':
-        response_text, telemetry = call_gemini_with_retry(client, full_prompt)
+        response_text, telemetry = call_gemini_with_retry(client, full_prompt, label='article-selection')
     else:
         raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
 
@@ -634,9 +706,18 @@ KEYWORDS: {keywords_text}
             
             try:
                 if LLM_MODEL == 'Ollama':
-                    summary, summary_telemetry = call_ollama_with_retry(client, summary_prompt, model='qwen3.5:4b')
+                    summary, summary_telemetry = call_ollama_with_retry(
+                        client,
+                        summary_prompt,
+                        model='qwen3.5:4b',
+                        label=f'summary-{idx}'
+                    )
                 elif LLM_MODEL == 'Gemini':
-                    summary, summary_telemetry = call_gemini_with_retry(client, summary_prompt)
+                    summary, summary_telemetry = call_gemini_with_retry(
+                        client,
+                        summary_prompt,
+                        label=f'summary-{idx}'
+                    )
                 else:
                     raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
 
