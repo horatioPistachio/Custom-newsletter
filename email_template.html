@@ -170,6 +170,13 @@
             color: #666;
             font-size: 13px;
         }
+        .footer-usage {
+            margin-top: 12px;
+            padding: 12px 14px;
+            background-color: #f8f8f8;
+            border-radius: 5px;
+            color: #555;
+        }
         .footer a {
             color: #ff6600;
             text-decoration: none;
@@ -243,6 +250,11 @@
                 This newsletter was automatically curated from <a href="https://news.ycombinator.com/">Hacker News</a><br>
                 Generated on {{ date }} • Powered by AI and a 1050ti
             </p>
+            {% if usage_totals %}
+            <div class="footer-usage">
+                LLM usage for this run: {{ usage_totals.calls }} calls • {{ usage_totals.input_tokens }} input tokens • {{ usage_totals.output_tokens }} output tokens • {{ usage_totals.total_tokens }} total tokens
+            </div>
+            {% endif %}
         </div>
     </div>
 </body>

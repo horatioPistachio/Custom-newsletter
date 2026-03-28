@@ -322,7 +322,38 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
     raise Exception("Max retries exceeded")
 
 
-def render_newsletter_email(summaries: List[dict], keywords: List[str], total_articles: int) -> str:
+def create_usage_totals() -> dict:
+    """
+    Create an accumulator for LLM usage across the full newsletter run.
+
+    Returns:
+        Dictionary with aggregate counters initialized to zero
+    """
+    return {
+        'calls': 0,
+        'input_tokens': 0,
+        'output_tokens': 0,
+        'total_tokens': 0,
+        'duration': 0.0,
+    }
+
+
+def add_usage_totals(usage_totals: dict, telemetry: dict) -> None:
+    """
+    Merge a single telemetry payload into the aggregate usage counters.
+
+    Args:
+        usage_totals: Aggregate usage dictionary to update in place
+        telemetry: Telemetry dictionary from one LLM call
+    """
+    usage_totals['calls'] += 1
+    usage_totals['input_tokens'] += telemetry.get('input_tokens', 0)
+    usage_totals['output_tokens'] += telemetry.get('output_tokens', 0)
+    usage_totals['total_tokens'] += telemetry.get('total_tokens', 0)
+    usage_totals['duration'] += telemetry.get('duration', 0.0)
+
+
+def render_newsletter_email(summaries: List[dict], keywords: List[str], total_articles: int, usage_totals: dict) -> str:
     """
     Render the newsletter HTML email using Jinja2 template.
     
@@ -330,6 +361,7 @@ def render_newsletter_email(summaries: List[dict], keywords: List[str], total_ar
         summaries: List of article summary dictionaries
         keywords: List of keyword strings
         total_articles: Total number of articles analyzed
+        usage_totals: Aggregate LLM usage telemetry for the run
         
     Returns:
         Rendered HTML email as a string
@@ -367,7 +399,8 @@ def render_newsletter_email(summaries: List[dict], keywords: List[str], total_ar
             keywords=keywords,
             total_articles=total_articles,
             selected_count=len(summaries),
-            articles=processed_summaries
+            articles=processed_summaries,
+            usage_totals=usage_totals
         )
         
         return html_content
@@ -483,7 +516,7 @@ if __name__ == "__main__":
         print("No titles found or an error occurred.")
 
 
-    keywords = [ "Mechanical engineering"]
+    keywords = [ "Mechanical engineering, IOT, Agtech, Claude, LoRaWAN"]
     
     # Read the newsletter prompt context
     with open('newsletter_prompt_context.md', 'r', encoding='utf-8') as f:
@@ -514,12 +547,16 @@ KEYWORDS: {keywords_text}
     print("="*80 + "\n")
 
     
+    usage_totals = create_usage_totals()
+
     if LLM_MODEL == 'Ollama':
         response_text, telemetry = call_ollama_with_retry(client, full_prompt, model='qwen3.5:4b')
     elif LLM_MODEL == 'Gemini':
         response_text, telemetry = call_gemini_with_retry(client, full_prompt)
     else:
         raise ValueError(f"Unsupported LLM_MODEL: {LLM_MODEL}")
+
+    add_usage_totals(usage_totals, telemetry)
     
     print("AI Response:")
     print("-" * 80)
@@ -531,8 +568,14 @@ KEYWORDS: {keywords_text}
     print("-" * 80)
     
     # Parse the AI response to get selected article indexes
+    max_selected_articles = 5
     selected_indexes = parse_ai_response(response_text)
     print(f"\nSelected article indexes: {selected_indexes}\n")
+
+    if len(selected_indexes) > max_selected_articles:
+        print(f"Capping selected articles to the first {max_selected_articles}: "
+              f"{selected_indexes[:max_selected_articles]}\n")
+        selected_indexes = selected_indexes[:max_selected_articles]
     
     if not selected_indexes:
         print("No articles were selected by the AI.")
@@ -602,6 +645,8 @@ KEYWORDS: {keywords_text}
                       f"In: {summary_telemetry['input_tokens']} | Out: {summary_telemetry['output_tokens']} | "
                       f"Total: {summary_telemetry['total_tokens']} tokens")
 
+                add_usage_totals(usage_totals, summary_telemetry)
+
                 summaries.append({
                     'index': idx,
                     'title': title,
@@ -634,9 +679,16 @@ KEYWORDS: {keywords_text}
         print("\n" + "="*80)
         print("NEWSLETTER EMAIL GENERATION")
         print("="*80 + "\n")
+
+        print("Aggregate LLM usage for this run:")
+        print(f"  Calls: {usage_totals['calls']}")
+        print(f"  Input tokens: {usage_totals['input_tokens']}")
+        print(f"  Output tokens: {usage_totals['output_tokens']}")
+        print(f"  Total tokens: {usage_totals['total_tokens']}")
+        print(f"  Model time: {usage_totals['duration']:.2f}s\n")
         
         print("Rendering email template...")
-        html_content = render_newsletter_email(summaries, keywords, len(results))
+        html_content = render_newsletter_email(summaries, keywords, len(results), usage_totals)
         
         if html_content:
             print(f"✓ Email HTML rendered successfully ({len(html_content)} characters)\n")
