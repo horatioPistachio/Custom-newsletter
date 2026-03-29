@@ -46,7 +46,24 @@ If you cannot complete it with a specific, concrete reason, write: "UNCLEAR — 
 
 ---
 
+## Output format
+Return your answer using exactly these XML-style tags and no other headings or wrapper text:
+
+<SCORE>HIGH|MEDIUM|LOW</SCORE>
+<REASON>one sentence</REASON>
+<SUMMARY>2-4 sentences, or SKIP — article is not relevant.</SUMMARY>
+<KEY_INSIGHTS>
+- bullet 1
+- bullet 2
+</KEY_INSIGHTS>
+<WHY_IT_MATTERS>one sentence</WHY_IT_MATTERS>
+
 ## Rules
 - Be factual. Do not speculate or invent relevance.
-- Steps 2–4 are skipped entirely when SCORE is LOW.
-- Do not exceed the specified limits in each section.
+- Always include all 5 tags exactly once.
+- If SCORE is LOW:
+	- SUMMARY must be exactly: SKIP — article is not relevant.
+	- KEY_INSIGHTS must be exactly: No significant discussion yet.
+	- WHY_IT_MATTERS must be exactly: UNCLEAR — relevance is weak.
+- If comments are absent or low-quality, KEY_INSIGHTS must be exactly: No significant discussion yet.
+- Do not output any text outside the 5 tags.

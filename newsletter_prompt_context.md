@@ -8,7 +8,7 @@ You are a classifier. Your only job is to match article titles against keywords.
 
 ## Instructions
 1. Read each numbered title carefully.
-2. A title is RELEVANT if it is clearly about one or more of the KEYWORDS.
+2. A title is RELEVANT if it could be about one or more of the KEYWORDS. Err on the side of relevance.
 3. List the numbers of all relevant titles, separated by commas.
 4. If no titles are relevant, output exactly: NONE
 5. Output ONLY the numbers (or NONE). No explanation. No punctuation other than commas.

@@ -22,6 +22,7 @@ LLM_MODEL = os.getenv('LLM_MODEL', 'Gemini')
 LLM_DEBUG_LOGS = os.getenv('LLM_DEBUG_LOGS', 'false').lower() in {'1', 'true', 'yes', 'on'}
 LLM_DEBUG_LOG_DIR = Path(os.getenv('LLM_DEBUG_LOG_DIR', 'llm_debug_logs'))
 LLM_DEBUG_SEQUENCE = 0
+OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '8192'))
 
 
 
@@ -191,6 +192,115 @@ def parse_ai_response(response_text: str) -> List[int]:
     return [int(num) for num in numbers]
 
 
+def normalize_token_count(value) -> int:
+    """
+    Normalize provider token counts so missing values do not break telemetry math.
+
+    Args:
+        value: Token count value from an API response
+
+    Returns:
+        Integer token count, defaulting to zero when the provider returns None
+    """
+    return int(value) if value is not None else 0
+
+
+def extract_tag_content(text: str, tag_name: str) -> str:
+    """
+    Extract the inner content of a simple XML-style tag.
+
+    Args:
+        text: Model response text
+        tag_name: Tag name to extract
+
+    Returns:
+        The stripped inner content, or an empty string if not found
+    """
+    pattern = rf'<{tag_name}>\s*(.*?)\s*</{tag_name}>'
+    match = re.search(pattern, text, flags=re.DOTALL | re.IGNORECASE)
+    return match.group(1).strip() if match else ''
+
+
+def parse_summary_response(response_text: str) -> dict:
+    """
+    Parse the tagged summary response into structured fields.
+
+    Args:
+        response_text: Raw LLM response text
+
+    Returns:
+        Parsed summary sections with a fallback marker when tags are missing
+    """
+    score = extract_tag_content(response_text, 'SCORE').upper()
+    reason = extract_tag_content(response_text, 'REASON')
+    summary_text = extract_tag_content(response_text, 'SUMMARY')
+    key_insights_block = extract_tag_content(response_text, 'KEY_INSIGHTS')
+    why_it_matters = extract_tag_content(response_text, 'WHY_IT_MATTERS')
+
+    key_insights = []
+    for line in key_insights_block.splitlines():
+        cleaned_line = line.strip()
+        if not cleaned_line:
+            continue
+        if cleaned_line.startswith('- '):
+            key_insights.append(cleaned_line[2:].strip())
+        else:
+            key_insights.append(cleaned_line)
+
+    parse_success = all([score, reason, summary_text, key_insights_block, why_it_matters])
+
+    return {
+        'parse_success': parse_success,
+        'score': score or 'UNKNOWN',
+        'reason': reason or 'Unable to parse relevance reason.',
+        'summary_text': summary_text or response_text.strip(),
+        'key_insights': key_insights,
+        'why_it_matters': why_it_matters or 'Unable to parse why-it-matters section.',
+        'raw_response': response_text,
+    }
+
+
+def build_summary_markdown(parsed_summary: dict) -> str:
+    """
+    Build a display-friendly markdown summary from parsed LLM sections.
+
+    Args:
+        parsed_summary: Structured summary dictionary
+
+    Returns:
+        Markdown string for console and email rendering
+    """
+    summary_lines = [
+        f"**Relevance:** {parsed_summary['score']}",
+        f"**Reason:** {parsed_summary['reason']}",
+        '',
+        parsed_summary['summary_text'],
+        '',
+        '**Key insights**',
+    ]
+
+    if parsed_summary['key_insights']:
+        for insight in parsed_summary['key_insights']:
+            summary_lines.append(f"- {insight}")
+    else:
+        summary_lines.append('No significant discussion yet.')
+
+    summary_lines.extend([
+        '',
+        '**Why it matters**',
+        parsed_summary['why_it_matters'],
+    ])
+
+    if not parsed_summary['parse_success']:
+        summary_lines.extend([
+            '',
+            '**Raw response fallback**',
+            parsed_summary['raw_response'],
+        ])
+
+    return '\n'.join(summary_lines)
+
+
 def write_llm_debug_log(label: str, prompt: str, response_text: str, telemetry: dict) -> None:
     """
     Persist a markdown log of a completed LLM call when debug logging is enabled.
@@ -277,8 +387,12 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3, label: str
             duration = time.time() - start_time
             
             # Extract token usage if available
-            input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
-            output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            input_tokens = normalize_token_count(
+                getattr(response.usage_metadata, 'prompt_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            )
+            output_tokens = normalize_token_count(
+                getattr(response.usage_metadata, 'candidates_token_count', 0) if hasattr(response, 'usage_metadata') else 0
+            )
             
             telemetry = {
                 'duration': duration,
@@ -345,25 +459,32 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
     for attempt in range(max_retries):
         try:
             start_time = time.time()
-            response = client.chat(model=model, messages=[
-                {
-                    'role': 'user',
-                    'content': prompt,
+            response = client.chat(
+                model=model,
+                messages=[
+                    {
+                        'role': 'user',
+                        'content': prompt,
+                    },
+                ],
+                options={
+                    'num_ctx': OLLAMA_NUM_CTX,
                 },
-            ],
-            think=False)
+                think=False,
+            )
             duration = time.time() - start_time
             
             # Extract token usage if available
-            input_tokens = getattr(response, 'prompt_eval_count', 0)
-            output_tokens = getattr(response, 'eval_count', 0)
+            input_tokens = normalize_token_count(getattr(response, 'prompt_eval_count', 0))
+            output_tokens = normalize_token_count(getattr(response, 'eval_count', 0))
             
             telemetry = {
                 'duration': duration,
                 'input_tokens': input_tokens,
                 'output_tokens': output_tokens,
                 'total_tokens': input_tokens + output_tokens,
-                'model': model
+                'model': model,
+                'num_ctx': OLLAMA_NUM_CTX,
             }
 
             write_llm_debug_log(label, prompt, response.message.content, telemetry)
@@ -583,7 +704,7 @@ if __name__ == "__main__":
         print("No titles found or an error occurred.")
 
 
-    keywords = [ "Mechanical engineering, IOT, Agtech, Claude, LoRaWAN"]
+    keywords = [ "IOT, Agtech, Embedded, AI"]
     
     # Read the newsletter prompt context
     with open('newsletter_prompt_context.md', 'r', encoding='utf-8') as f:
@@ -728,12 +849,28 @@ KEYWORDS: {keywords_text}
 
                 add_usage_totals(usage_totals, summary_telemetry)
 
+                parsed_summary = parse_summary_response(summary)
+                display_summary = build_summary_markdown(parsed_summary)
+
+                if not parsed_summary['parse_success']:
+                    print("    Warning: Failed to fully parse summary response; using raw fallback in output.")
+
+                if parsed_summary['score'] == 'LOW':
+                    print(f"    Discarding article due to low relevance: {parsed_summary['reason']}")
+                    continue
+
                 summaries.append({
                     'index': idx,
                     'title': title,
                     'article_url': article_url,
                     'comments_url': comments_url,
-                    'summary': summary
+                    'summary': display_summary,
+                    'relevance_score': parsed_summary['score'],
+                    'relevance_reason': parsed_summary['reason'],
+                    'summary_text': parsed_summary['summary_text'],
+                    'key_insights': parsed_summary['key_insights'],
+                    'why_it_matters': parsed_summary['why_it_matters'],
+                    'raw_summary_response': parsed_summary['raw_response'],
                 })
                 
                 # Small delay to avoid overwhelming the API
@@ -747,6 +884,18 @@ KEYWORDS: {keywords_text}
         print("\n\n" + "="*80)
         print("FINAL NEWSLETTER SUMMARIES")
         print("="*80 + "\n")
+
+        if not summaries:
+            print("No medium/high relevance articles remained after summarization. Newsletter email will not be sent.")
+            print("\n" + "="*80)
+            print("LLM USAGE FOR THIS RUN")
+            print("="*80 + "\n")
+            print(f"  Calls: {usage_totals['calls']}")
+            print(f"  Input tokens: {usage_totals['input_tokens']}")
+            print(f"  Output tokens: {usage_totals['output_tokens']}")
+            print(f"  Total tokens: {usage_totals['total_tokens']}")
+            print(f"  Model time: {usage_totals['duration']:.2f}s\n")
+            raise SystemExit(0)
         
         for item in summaries:
             print(f"[{item['index']}] {item['title']}")
