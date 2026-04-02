@@ -721,13 +721,11 @@ if __name__ == "__main__":
     keywords_text = ", ".join(keywords)
     
     # Combine everything into the final prompt
-    full_prompt = f"""{prompt_context}
-
-TITLES TO ANALYZE:
-{titles_text}
-
-KEYWORDS: {keywords_text}
-"""
+    full_prompt = (
+        prompt_context
+        .replace('{keywords}', keywords_text)
+        .replace('{titles}', titles_text.rstrip())
+    )
     
     # Make the Gemini API call
     print("\n" + "="*80)
