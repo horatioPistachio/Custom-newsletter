@@ -23,6 +23,7 @@ LLM_DEBUG_LOGS = os.getenv('LLM_DEBUG_LOGS', 'false').lower() in {'1', 'true', '
 LLM_DEBUG_LOG_DIR = Path(os.getenv('LLM_DEBUG_LOG_DIR', 'llm_debug_logs'))
 LLM_DEBUG_SEQUENCE = 0
 OLLAMA_NUM_CTX = int(os.getenv('OLLAMA_NUM_CTX', '8192'))
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'gemma4:e4b')
 
 
 
@@ -425,7 +426,7 @@ def call_gemini_with_retry(client, prompt: str, max_retries: int = 3, label: str
     raise Exception("Max retries exceeded")
 
 
-def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = 'qwen3.5:4b', label: str = 'ollama-call') -> tuple[str, dict]:
+def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str = OLLAMA_MODEL, label: str = 'ollama-call') -> tuple[str, dict]:
     """
     Call Ollama API with exponential backoff retry on errors.
     
@@ -433,7 +434,7 @@ def call_ollama_with_retry(client, prompt: str, max_retries: int = 3, model: str
         client: The Ollama client
         prompt: The prompt to send
         max_retries: Maximum number of retries (default 3)
-        model: The Ollama model to use (default 'qwen3.5:4b')
+        model: The Ollama model to use (default from OLLAMA_MODEL env var)
         label: Logical label for debug logging
         
     Returns:
@@ -730,6 +731,8 @@ if __name__ == "__main__":
     # Make the Gemini API call
     print("\n" + "="*80)
     print(f"Calling {LLM_MODEL} API to analyze articles...")
+    if LLM_MODEL == 'Ollama':
+        print(f"Using Ollama model: {OLLAMA_MODEL}")
     print("="*80 + "\n")
 
     
@@ -739,7 +742,7 @@ if __name__ == "__main__":
         response_text, telemetry = call_ollama_with_retry(
             client,
             full_prompt,
-            model='qwen3.5:4b',
+            model=OLLAMA_MODEL,
             label='article-selection'
         )
     elif LLM_MODEL == 'Gemini':
@@ -828,7 +831,7 @@ if __name__ == "__main__":
                     summary, summary_telemetry = call_ollama_with_retry(
                         client,
                         summary_prompt,
-                        model='qwen3.5:4b',
+                        model=OLLAMA_MODEL,
                         label=f'summary-{idx}'
                     )
                 elif LLM_MODEL == 'Gemini':
