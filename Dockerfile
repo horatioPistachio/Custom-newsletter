@@ -21,7 +21,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY main.py .
+COPY email_sender.py .
+COPY email_template.html .
+COPY newsletter_prompt_context.md .
+COPY summary_prompt_context.md .
 
 # Copy and set up entrypoint script
 COPY entrypoint.sh /entrypoint.sh
