@@ -54,8 +54,7 @@ services:
     volumes:
       - ./ollama:/root/.ollama
     command: >
-      sh -c 'curl -X POST http://ollama:11434/api/pull -d "{\"name\": \"qwen3.5:4b\"}" && 
-         curl -X POST http://ollama:11434/api/pull -d "{\"name\": \"gemma4:e4b\"}"'
+      sh -c 'curl -X POST http://ollama:11434/api/pull -d "{\"name\": \"gemma4:e4b\"}"'
     depends_on:
       ollama:
         condition: service_healthy
