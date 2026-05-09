@@ -33,6 +33,8 @@ docker-compose.yml
 # Documentation
 *.md
 !README.md
+!newsletter_prompt_context.md
+!summary_prompt_context.md
 LICENSE
 
 # Misc
